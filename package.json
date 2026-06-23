@@ -1,0 +1,40 @@
+{
+  "name": "transcribe-french",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env VITE_ENV=staging vite",
+    "dev:lan": "cross-env VITE_ENV=staging vite --host 0.0.0.0 --port 5173",
+    "build": "cross-env VITE_ENV=production vite build",
+    "preview": "vite preview",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting:transcribefrench",
+    "lint": "eslint . --ext ts,tsx --max-warnings 0",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@chakra-ui/icons": "^2.2.4",
+    "@chakra-ui/react": "^2.8.2",
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "firebase": "^12.9.0",
+    "framer-motion": "^10.16.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@typescript-eslint/eslint-plugin": "^8.55.0",
+    "@typescript-eslint/parser": "^8.55.0",
+    "@vitejs/plugin-react": "^5.1.4",
+    "cross-env": "^10.1.0",
+    "firebase-tools": "^14.11.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "typescript": "^5.3.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
+  }
+}

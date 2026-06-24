@@ -1,6 +1,6 @@
 import { get, ref } from "firebase/database";
 import { enrichExerciseWithTranscript } from "./exerciseEnrichment";
-import { rtdb } from "./firebase";
+import { rtdb } from "./firebaseRtdb";
 import type { AudioExercise, ExerciseSummary, WhisperSegment } from "../types";
 
 type RtdbExerciseRecord = {

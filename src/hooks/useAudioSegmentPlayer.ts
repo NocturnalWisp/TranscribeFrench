@@ -6,7 +6,9 @@ import {
   DEFAULT_PLAYBACK_WINDOW_SECONDS,
   DEFAULT_SEGMENTS_PER_CLIP,
   getExpectedTextForSegment,
-  groupWhisperSegments
+  groupWhisperSegments,
+  restoreWhisperSegmentIndex,
+  snapToClipStart
 } from "../utils/whisperSegmentGroups";
 
 const DEFAULT_PLAYBACK_SECONDS = DEFAULT_PLAYBACK_WINDOW_SECONDS;
@@ -36,6 +38,9 @@ export function useAudioSegmentPlayer({ exercise, onPlaybackError }: UseAudioSeg
     [exercise?.durationSeconds, resolvedDurationSeconds]
   );
 
+  const whisperSegmentCount = exercise?.whisperSegments?.length ?? 0;
+  const hasWhisperSegments = whisperSegmentCount > 0;
+
   const playbackSegments = useMemo(() => {
     if (exercise?.whisperSegments?.length) {
       return groupWhisperSegments(exercise.whisperSegments, segmentsPerClip);
@@ -60,10 +65,25 @@ export function useAudioSegmentPlayer({ exercise, onPlaybackError }: UseAudioSeg
     return [];
   }, [exercise, segmentsPerClip, totalDurationSeconds]);
 
-  const safeSegmentIndex =
-    playbackSegments.length === 0 ? 0 : Math.min(segmentIndex, playbackSegments.length - 1);
+  const clipIndex = hasWhisperSegments
+    ? Math.floor(segmentIndex / segmentsPerClip)
+    : segmentIndex;
 
-  const currentPlaybackSegment = playbackSegments[safeSegmentIndex];
+  const safeClipIndex =
+    playbackSegments.length === 0
+      ? 0
+      : Math.min(Math.max(0, clipIndex), playbackSegments.length - 1);
+
+  const safeSegmentIndex =
+    hasWhisperSegments && whisperSegmentCount > 0
+      ? Math.min(Math.max(0, segmentIndex), whisperSegmentCount - 1)
+      : safeClipIndex;
+
+  const clipStartIndex = hasWhisperSegments
+    ? snapToClipStart(safeSegmentIndex, segmentsPerClip)
+    : safeClipIndex;
+
+  const currentPlaybackSegment = playbackSegments[safeClipIndex];
   const segmentStartSeconds = currentPlaybackSegment?.start ?? 0;
   const currentSegmentEndSeconds =
     currentPlaybackSegment?.end ??
@@ -72,7 +92,7 @@ export function useAudioSegmentPlayer({ exercise, onPlaybackError }: UseAudioSeg
     () =>
       getExpectedTextForSegment(
         exercise?.whisperSegments,
-        safeSegmentIndex,
+        clipStartIndex,
         segmentsPerClip,
         currentPlaybackSegment,
         {
@@ -84,14 +104,14 @@ export function useAudioSegmentPlayer({ exercise, onPlaybackError }: UseAudioSeg
       currentPlaybackSegment,
       exercise?.expectedTranscription,
       exercise?.whisperSegments,
-      safeSegmentIndex,
+      clipStartIndex,
       segmentsPerClip,
       totalDurationSeconds
     ]
   );
 
-  const canGoPrevious = safeSegmentIndex > 0;
-  const canGoNext = safeSegmentIndex < playbackSegments.length - 1;
+  const canGoPrevious = safeClipIndex > 0;
+  const canGoNext = safeClipIndex < playbackSegments.length - 1;
 
   const segmentProgressPercent = totalDurationSeconds
     ? (segmentStartSeconds / totalDurationSeconds) * 100
@@ -199,17 +219,38 @@ export function useAudioSegmentPlayer({ exercise, onPlaybackError }: UseAudioSeg
   const goNextSegment = () => {
     if (!canGoNext) return;
     pauseAudio();
+    if (hasWhisperSegments) {
+      setSegmentIndex((safeClipIndex + 1) * segmentsPerClip);
+      return;
+    }
+
     setSegmentIndex((value) => value + 1);
   };
 
   const goPreviousSegment = () => {
     if (!canGoPrevious) return;
     pauseAudio();
+    if (hasWhisperSegments) {
+      setSegmentIndex((safeClipIndex - 1) * segmentsPerClip);
+      return;
+    }
+
     setSegmentIndex((value) => value - 1);
   };
 
   const goToSegment = (index: number) => {
-    if (index < 0 || index >= playbackSegments.length || index === safeSegmentIndex) {
+    if (hasWhisperSegments) {
+      const clampedIndex = Math.min(whisperSegmentCount - 1, Math.max(0, index));
+      if (clampedIndex === safeSegmentIndex) {
+        return;
+      }
+
+      pauseAudio();
+      setSegmentIndex(clampedIndex);
+      return;
+    }
+
+    if (index < 0 || index >= playbackSegments.length || index === safeClipIndex) {
       return;
     }
 
@@ -226,15 +267,23 @@ export function useAudioSegmentPlayer({ exercise, onPlaybackError }: UseAudioSeg
   };
 
   const updateSegmentsPerClip = (count: number) => {
-    pauseAudio();
+    if (isPlayingSegment || isAudioBuffering) {
+      return;
+    }
+
     setSegmentsPerClip(clampSegmentsPerClip(count));
-    setSegmentIndex(0);
   };
 
   const restorePlaybackState = (state: { segmentIndex: number; segmentsPerClip: number }) => {
     pauseAudio();
-    setSegmentsPerClip(clampSegmentsPerClip(state.segmentsPerClip));
-    setSegmentIndex(Math.max(0, Math.round(state.segmentIndex)));
+    const nextSegmentsPerClip = clampSegmentsPerClip(state.segmentsPerClip);
+    const nextSegmentIndex = Math.max(0, Math.round(state.segmentIndex));
+    setSegmentsPerClip(nextSegmentsPerClip);
+    setSegmentIndex(
+      hasWhisperSegments
+        ? restoreWhisperSegmentIndex(nextSegmentIndex, nextSegmentsPerClip, whisperSegmentCount)
+        : nextSegmentIndex
+    );
   };
 
   useEffect(() => {
@@ -263,11 +312,13 @@ export function useAudioSegmentPlayer({ exercise, onPlaybackError }: UseAudioSeg
     currentSegmentEndSeconds,
     currentSegmentText,
     safeSegmentIndex,
+    progressClipIndex: safeClipIndex,
+    clipStartIndex,
     totalDurationSeconds,
     segmentsPerClip,
     canGoPrevious,
     canGoNext,
-    segmentCount: playbackSegments.length,
+    segmentCount: hasWhisperSegments ? whisperSegmentCount : playbackSegments.length,
     segmentProgressPercent,
     playSegment,
     goNextSegment,

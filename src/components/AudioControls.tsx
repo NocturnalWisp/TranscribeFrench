@@ -170,7 +170,7 @@ export function AudioControls({
               value={segmentsPerClip}
               onChange={onSegmentsPerClipChange}
               onPointerDown={keepKeyboardOpen}
-              isDisabled={!hasExercise}
+              isDisabled={!hasExercise || isPlayingSegment || isAudioBuffering}
               colorScheme="purple"
             >
               <SliderTrack>

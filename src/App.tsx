@@ -1,460 +1,50 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { Alert, AlertIcon, Box, Flex, Spinner } from "@chakra-ui/react";
-import { keepKeyboardOpen } from "./utils/keepKeyboardOpen";
-import { AppHeader } from "./components/AppHeader";
-import { AudioControls } from "./components/AudioControls";
-import { AuthGate } from "./components/AuthGate";
-import { TranscriptionEditor } from "./components/TranscriptionEditor";
-import { useAudioSegmentPlayer } from "./hooks/useAudioSegmentPlayer";
+import { lazy, Suspense } from "react";
+import { Flex, Spinner } from "@chakra-ui/react";
 import { useAuth } from "./hooks/useAuth";
-import { signOutUser } from "./services/auth";
-import {
-  listExerciseCatalog,
-  loadExercise as fetchExercise,
-  loadExerciseById
-} from "./services/exercises";
-import { getUserSessionState, saveUserSessionState } from "./services/userSession";
-import { gradeTranscription } from "./utils/grading";
-import type { AudioExercise, ExerciseSummary, GradeResult } from "./types";
-import type { UserSessionState } from "./types/auth";
+import type { AccessMode } from "./types/auth";
+
+const AuthGate = lazy(() =>
+  import("./components/AuthGate").then((module) => ({ default: module.AuthGate }))
+);
+const PracticeSession = lazy(() => import("./components/PracticeSession"));
+
+function LoadingScreen() {
+  return (
+    <Flex minH="100dvh" align="center" justify="center" bg="gray.50">
+      <Spinner size="lg" color="teal.500" />
+    </Flex>
+  );
+}
 
 function App() {
   const { user, authReady, accessMode, setAccessMode, clearAccess, isTrial, hasAccess } =
     useAuth();
-  const [exercise, setExercise] = useState<AudioExercise | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [isLoadingExercise, setIsLoadingExercise] = useState(false);
-  const [transcriptionInput, setTranscriptionInput] = useState("");
-  const [gradeResult, setGradeResult] = useState<GradeResult | null>(null);
-  const [gradedSubmission, setGradedSubmission] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const restoredAccessRef = useRef(false);
-  const keepKeyboardOpenRef = useRef(false);
-  const isGradedRef = useRef(false);
-  const pendingSessionRestoreRef = useRef<UserSessionState | null>(null);
-  const [isSessionRestored, setIsSessionRestored] = useState(false);
-  const [exerciseCatalog, setExerciseCatalog] = useState<ExerciseSummary[]>([]);
-  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
 
-  const audio = useAudioSegmentPlayer({
-    exercise,
-    onPlaybackError: (message) => setLoadError(message)
-  });
-
-  const loadExercise = async (
-    mode: NonNullable<typeof accessMode>,
-    options?: {
-      preferredExerciseId?: string | null;
-      catalog?: ExerciseSummary[];
-    }
-  ) => {
-    const catalog = options?.catalog ?? exerciseCatalog;
-    const preferredExerciseId = options?.preferredExerciseId;
-    setIsLoadingExercise(true);
-    setLoadError(null);
-    setGradeResult(null);
-    setGradedSubmission("");
-    setTranscriptionInput("");
-    audio.resetSegment();
-    setIsSessionRestored(false);
-    pendingSessionRestoreRef.current = null;
-
-    try {
-      let nextExercise: AudioExercise | null = null;
-      let sessionToRestore: UserSessionState | null = null;
-      let exerciseId = preferredExerciseId?.trim() || null;
-
-      if (mode === "full" && user) {
-        if (!exerciseId) {
-          const session = await getUserSessionState(user.uid);
-          if (session?.exerciseId) {
-            exerciseId = session.exerciseId;
-            sessionToRestore = session;
-          }
-        }
-
-        if (!exerciseId && catalog.length > 0) {
-          exerciseId = catalog[0].id;
-        }
-      }
-
-      if (exerciseId) {
-        nextExercise = await loadExerciseById(exerciseId);
-        if (nextExercise && sessionToRestore?.exerciseId === nextExercise.id) {
-          pendingSessionRestoreRef.current = sessionToRestore;
-        }
-      }
-
-      if (!nextExercise) {
-        nextExercise = await fetchExercise(mode, exerciseId ?? undefined);
-      }
-
-      setExercise(nextExercise);
-
-      if (mode === "full" && user && nextExercise && !sessionToRestore) {
-        await saveUserSessionState(user.uid, {
-          exerciseId: nextExercise.id,
-          segmentIndex: 0,
-          segmentsPerClip: 1,
-          transcriptionInput: ""
-        });
-      }
-    } catch {
-      setLoadError(
-        mode === "trial"
-          ? "Unable to load the trial exercise."
-          : "Unable to load an exercise."
-      );
-      setExercise(null);
-    } finally {
-      setIsLoadingExercise(false);
-    }
-  };
-
-  const handleExerciseSelect = async (exerciseId: string) => {
-    if (!user || isTrial || exercise?.id === exerciseId) {
-      return;
-    }
-
-    setIsLoadingExercise(true);
-    setLoadError(null);
-    setGradeResult(null);
-    setGradedSubmission("");
-    setTranscriptionInput("");
-    audio.pauseAudio();
-    audio.resetSegment();
-    setIsSessionRestored(false);
-    pendingSessionRestoreRef.current = null;
-
-    try {
-      const nextExercise = await loadExerciseById(exerciseId);
-      if (!nextExercise) {
-        setLoadError("Unable to load the selected exercise.");
-        return;
-      }
-
-      setExercise(nextExercise);
-      await saveUserSessionState(user.uid, {
-        exerciseId: nextExercise.id,
-        segmentIndex: 0,
-        segmentsPerClip: 1,
-        transcriptionInput: ""
-      });
-      setIsSessionRestored(true);
-    } catch {
-      setLoadError("Unable to load the selected exercise.");
-    } finally {
-      setIsLoadingExercise(false);
-    }
-  };
-
-  const runGrading = () => {
-    const expectedText = audio.currentSegmentText.trim();
-    if (!expectedText) {
-      setLoadError("Segment transcript is not available yet. Try another segment or reload.");
-      return;
-    }
-    setLoadError(null);
-    setGradedSubmission(transcriptionInput);
-    setGradeResult(gradeTranscription(expectedText, transcriptionInput));
-  };
-
-  const handleTranscriptionChange = (value: string) => {
-    if (isGradedRef.current) {
-      return;
-    }
-    setTranscriptionInput(value);
-  };
-
-  const focusTranscriptionForEditing = () => {
-    keepKeyboardOpenRef.current = true;
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus({ preventScroll: true });
-    });
-  };
-
-  const handleTranscriptionFocus = () => {
-    keepKeyboardOpenRef.current = true;
-  };
-
-  const handleTranscriptionBlur = () => {
-    requestAnimationFrame(() => {
-      const textarea = textareaRef.current;
-      if (!textarea || !keepKeyboardOpenRef.current) {
-        return;
-      }
-
-      const active = document.activeElement;
-      const movedToOtherField =
-        active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
-      if (movedToOtherField && active !== textarea) {
-        keepKeyboardOpenRef.current = false;
-        return;
-      }
-
-      textarea.focus({ preventScroll: true });
-    });
-  };
-
-  const handleKeepKeyboardPointerDown = (event: PointerEvent) => {
-    if (!keepKeyboardOpenRef.current || isGradedRef.current) {
-      return;
-    }
-
-    const target = event.target as HTMLElement;
-    if (target.closest("input, textarea, button, a, [role='slider']")) {
-      return;
-    }
-
-    keepKeyboardOpen(event);
-    textareaRef.current?.focus({ preventScroll: true });
-  };
-
-  const handleGradeOrRetry = () => {
-    if (gradeResult) {
-      setGradeResult(null);
-      setGradedSubmission("");
-      setTranscriptionInput("");
-      focusTranscriptionForEditing();
-      return;
-    }
-    runGrading();
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus({ preventScroll: true });
-    });
-  };
-
-  const resetTranscriptionForNewClip = () => {
-    setTranscriptionInput("");
-    setGradeResult(null);
-    setGradedSubmission("");
-  };
-
-  const handlePreviousSegment = () => {
-    audio.goPreviousSegment();
-    resetTranscriptionForNewClip();
-    focusTranscriptionForEditing();
-  };
-
-  const handleNextSegment = () => {
-    audio.goNextSegment();
-    resetTranscriptionForNewClip();
-    focusTranscriptionForEditing();
-  };
-
-  const handleSelectSegment = (index: number) => {
-    audio.goToSegment(index);
-    resetTranscriptionForNewClip();
-    focusTranscriptionForEditing();
-  };
-
-  const handleSegmentsPerClipChange = (count: number) => {
-    audio.setSegmentsPerClip(count);
-    resetTranscriptionForNewClip();
-    focusTranscriptionForEditing();
-  };
-
-  const handleLeaveSession = async () => {
-    if (user) {
-      await signOutUser();
-    }
-
-    audio.pauseAudio();
-    restoredAccessRef.current = false;
-    clearAccess();
-    setExerciseCatalog([]);
-    setExercise(null);
-    setLoadError(null);
-    setGradeResult(null);
-    setGradedSubmission("");
-    setTranscriptionInput("");
-    audio.resetSegment();
-  };
-
-  const beginSession = async (mode: NonNullable<typeof accessMode>) => {
-    restoredAccessRef.current = true;
+  const handleSelectAccessMode = (mode: AccessMode) => {
     setAccessMode(mode);
-
-    let catalog: ExerciseSummary[] = [];
-    if (mode === "full") {
-      setIsLoadingCatalog(true);
-      try {
-        catalog = await listExerciseCatalog();
-        setExerciseCatalog(catalog);
-      } catch {
-        setExerciseCatalog([]);
-        setLoadError("Unable to load the exercise list.");
-      } finally {
-        setIsLoadingCatalog(false);
-      }
-    } else {
-      setExerciseCatalog([]);
-    }
-
-    await loadExercise(mode, { catalog });
   };
-
-  useEffect(() => {
-    if (!authReady || !hasAccess || !accessMode || restoredAccessRef.current) {
-      return;
-    }
-
-    restoredAccessRef.current = true;
-
-    const restoreSession = async () => {
-      let catalog: ExerciseSummary[] = [];
-      if (accessMode === "full") {
-        setIsLoadingCatalog(true);
-        try {
-          catalog = await listExerciseCatalog();
-          setExerciseCatalog(catalog);
-        } catch {
-          setExerciseCatalog([]);
-        } finally {
-          setIsLoadingCatalog(false);
-        }
-      }
-
-      await loadExercise(accessMode, { catalog });
-    };
-
-    void restoreSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, hasAccess, accessMode, user?.uid]);
-
-  useEffect(() => {
-    if (!exercise) {
-      return;
-    }
-
-    const pendingSession = pendingSessionRestoreRef.current;
-    if (!pendingSession || pendingSession.exerciseId !== exercise.id) {
-      setIsSessionRestored(true);
-      return;
-    }
-
-    pendingSessionRestoreRef.current = null;
-    audio.restorePlaybackState({
-      segmentIndex: pendingSession.segmentIndex,
-      segmentsPerClip: pendingSession.segmentsPerClip
-    });
-    setTranscriptionInput(pendingSession.transcriptionInput);
-    setIsSessionRestored(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercise?.id]);
-
-  useEffect(() => {
-    if (!user || !exercise || isTrial || !isSessionRestored) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void saveUserSessionState(user.uid, {
-        exerciseId: exercise.id,
-        segmentIndex: audio.safeSegmentIndex,
-        segmentsPerClip: audio.segmentsPerClip,
-        transcriptionInput
-      });
-    }, 500);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [
-    user?.uid,
-    exercise?.id,
-    audio.safeSegmentIndex,
-    audio.segmentsPerClip,
-    transcriptionInput,
-    isTrial,
-    isSessionRestored
-  ]);
-
-  const isGraded = Boolean(gradeResult);
-  isGradedRef.current = isGraded;
 
   if (!authReady) {
+    return <LoadingScreen />;
+  }
+
+  if (!hasAccess || !accessMode) {
     return (
-      <Flex minH="100dvh" align="center" justify="center" bg="gray.50">
-        <Spinner size="lg" color="teal.500" />
-      </Flex>
+      <Suspense fallback={<LoadingScreen />}>
+        <AuthGate onSelectAccessMode={handleSelectAccessMode} />
+      </Suspense>
     );
   }
 
-  if (!hasAccess) {
-    return <AuthGate onSelectAccessMode={beginSession} />;
-  }
-
   return (
-    <Flex
-      direction="column"
-      minH="100dvh"
-      maxW={{ base: "100%", md: "640px" }}
-      mx="auto"
-      bg="gray.50"
-      onPointerDownCapture={handleKeepKeyboardPointerDown}
-    >
-      <AppHeader
-        title={exercise?.title ?? (isLoadingExercise ? "Loading exercise…" : "Transcribe French")}
+    <Suspense fallback={<LoadingScreen />}>
+      <PracticeSession
         user={user}
+        accessMode={accessMode}
         isTrial={isTrial}
-        onLeave={() => void handleLeaveSession()}
-        exercises={!isTrial && user ? exerciseCatalog : undefined}
-        selectedExerciseId={exercise?.id}
-        isLoadingExercises={isLoadingCatalog}
-        isExerciseLoading={isLoadingExercise}
-        onSelectExercise={(exerciseId) => void handleExerciseSelect(exerciseId)}
+        onLeave={clearAccess}
       />
-
-      {loadError ? (
-        <Alert status="warning" borderRadius={0}>
-          <AlertIcon />
-          {loadError}
-        </Alert>
-      ) : null}
-
-      <AudioControls
-        audioRef={audio.audioRef}
-        audioUrl={audio.audioUrl}
-        isAudioBuffering={audio.isAudioBuffering}
-        isPlayingSegment={audio.isPlayingSegment}
-        segmentIndex={audio.safeSegmentIndex}
-        segmentCount={audio.segmentCount}
-        segmentStartSeconds={audio.segmentStartSeconds}
-        currentSegmentEndSeconds={audio.currentSegmentEndSeconds}
-        segmentsPerClip={audio.segmentsPerClip}
-        canGoPrevious={audio.canGoPrevious}
-        canGoNext={audio.canGoNext}
-        hasExercise={Boolean(exercise)}
-        onPlaySegment={audio.playSegment}
-        onStopSegment={audio.pauseAudio}
-        onPreviousSegment={handlePreviousSegment}
-        onNextSegment={handleNextSegment}
-        onSelectSegment={handleSelectSegment}
-        onSegmentsPerClipChange={handleSegmentsPerClipChange}
-        onLoadedMetadata={audio.onLoadedMetadata}
-        onCanPlay={audio.onCanPlay}
-        onAudioError={audio.onAudioError}
-        onPause={audio.onPause}
-        onPlay={audio.onPlay}
-        isGraded={isGraded}
-        onGradeOrRetry={handleGradeOrRetry}
-        gradeDisabled={!exercise || (!isGraded && !transcriptionInput.trim())}
-      />
-
-      <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
-        <TranscriptionEditor
-          ref={textareaRef}
-          value={transcriptionInput}
-          onChange={handleTranscriptionChange}
-          onFocus={handleTranscriptionFocus}
-          onBlur={handleTranscriptionBlur}
-          isGraded={isGraded}
-          submittedText={gradedSubmission}
-          correctedWords={gradeResult?.correctedWords}
-        />
-      </Box>
-    </Flex>
+    </Suspense>
   );
 }
 

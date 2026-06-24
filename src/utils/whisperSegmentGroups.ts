@@ -19,6 +19,40 @@ export function clampSegmentsPerClip(count: number): number {
   return Math.min(MAX_SEGMENTS_PER_CLIP, Math.max(MIN_SEGMENTS_PER_CLIP, Math.round(count)));
 }
 
+export function clipIndexFromWhisperSegment(segmentIndex: number, segmentsPerClip: number): number {
+  return Math.floor(segmentIndex / clampSegmentsPerClip(segmentsPerClip));
+}
+
+export function snapToClipStart(segmentIndex: number, segmentsPerClip: number): number {
+  const clipSize = clampSegmentsPerClip(segmentsPerClip);
+  return clipIndexFromWhisperSegment(segmentIndex, clipSize) * clipSize;
+}
+
+export function restoreWhisperSegmentIndex(
+  savedSegmentIndex: number,
+  segmentsPerClip: number,
+  whisperSegmentCount: number
+): number {
+  const normalizedIndex = Math.max(0, Math.round(savedSegmentIndex));
+  if (whisperSegmentCount <= 0) {
+    return normalizedIndex;
+  }
+
+  const clipSize = clampSegmentsPerClip(segmentsPerClip);
+  const clipCount = Math.ceil(whisperSegmentCount / clipSize);
+  const migratedWhisperIndex = normalizedIndex * clipSize;
+
+  if (
+    normalizedIndex > 0 &&
+    normalizedIndex < clipCount &&
+    migratedWhisperIndex < whisperSegmentCount
+  ) {
+    return migratedWhisperIndex;
+  }
+
+  return snapToClipStart(normalizedIndex, clipSize);
+}
+
 export function sliceTranscriptionByTimeRange(
   fullText: string,
   totalDurationSeconds: number,
@@ -90,7 +124,8 @@ export function getExpectedTextForSegment(
   }
 
   if (whisperSegments?.length && playbackSegment) {
-    const groupedText = groupWhisperSegments(whisperSegments, segmentsPerClip)[segmentIndex]?.text?.trim();
+    const clipIndex = clipIndexFromWhisperSegment(segmentIndex, segmentsPerClip);
+    const groupedText = groupWhisperSegments(whisperSegments, segmentsPerClip)[clipIndex]?.text?.trim();
     if (groupedText) {
       return groupedText;
     }

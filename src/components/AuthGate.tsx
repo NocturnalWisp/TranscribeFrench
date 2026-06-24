@@ -8,7 +8,7 @@ import {
   VStack
 } from "@chakra-ui/react";
 import { useState } from "react";
-import { signInWithGoogle } from "../services/auth";
+import { signInWithGoogle } from "../services/authActions";
 import type { AccessMode } from "../types/auth";
 
 type AuthGateProps = {

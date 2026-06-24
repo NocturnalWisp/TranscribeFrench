@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTimedPlaybackSegments,
+  clipIndexFromWhisperSegment,
   getExpectedTextForSegment,
   groupWhisperSegments,
-  sliceTranscriptionByTimeRange
+  sliceTranscriptionByTimeRange,
+  snapToClipStart
 } from "./whisperSegmentGroups";
 
 describe("groupWhisperSegments", () => {
@@ -30,6 +32,19 @@ describe("groupWhisperSegments", () => {
       { start: 0, end: 15, text: "Bonjour et bienvenue dans ce podcast" },
       { start: 15, end: 25, text: "aujourd'hui merci" }
     ]);
+  });
+});
+
+describe("snapToClipStart", () => {
+  it("aligns a whisper segment index to the start of its clip", () => {
+    expect(snapToClipStart(0, 10)).toBe(0);
+    expect(snapToClipStart(9, 10)).toBe(0);
+    expect(snapToClipStart(10, 10)).toBe(10);
+    expect(snapToClipStart(14, 10)).toBe(10);
+  });
+
+  it("maps whisper segment indices to clip indices", () => {
+    expect(clipIndexFromWhisperSegment(14, 10)).toBe(1);
   });
 });
 

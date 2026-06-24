@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
-import { subscribeToAuthState } from "../services/auth";
+import { subscribeToAuthState } from "../services/authState";
 import type { AccessMode } from "../types/auth";
 
 const ACCESS_MODE_STORAGE_KEY = "transcribe-french.access-mode";

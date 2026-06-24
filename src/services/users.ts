@@ -1,7 +1,7 @@
 import { get, ref, set, update } from "firebase/database";
 import type { User } from "firebase/auth";
 import type { UserProfile } from "../types/auth";
-import { rtdb } from "./firebase";
+import { rtdb } from "./firebaseRtdb";
 
 const userRef = (uid: string) => ref(rtdb!, `users/${uid}`);
 

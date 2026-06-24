@@ -126,6 +126,23 @@ export const gradeExpectedWords = (expected: string, submitted: string): GradedW
   }));
 };
 
+export const normalizeWordKey = (value: string): string =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9']/g, "")
+    .trim();
+
+export const extractMissedExpectedWords = (expected: string, submitted: string): string[] =>
+  gradeExpectedWords(expected, submitted)
+    .filter((word) => !word.isCorrect)
+    .map((word) => word.text)
+    .filter(Boolean);
+
+export const countExpectedWords = (expected: string): number =>
+  (expected.match(/\S+/g) ?? []).length;
+
 export const gradeTranscription = (expected: string, submitted: string): GradeResult => {
   const gradedWords = gradeWords(expected, submitted);
   const normalizedExpected = normalizeText(expected);

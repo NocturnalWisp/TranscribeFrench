@@ -8,7 +8,7 @@ import {
   loadLocalExercise,
   loadLocalExerciseById
 } from "./localExercises";
-import { isRealtimeDatabaseConfigured } from "./firebase";
+import { isRealtimeDatabaseConfigured } from "./firebaseApp";
 import type { AccessMode } from "../types/auth";
 import type { AudioExercise, ExerciseSummary } from "../types";
 const fallbackExercises: AudioExercise[] = [

@@ -45,5 +45,36 @@ const serveLocalAudioExercises = (): Plugin => ({
 });
 
 export default defineConfig({
-  plugins: [react(), serveLocalAudioExercises()]
+  plugins: [react(), serveLocalAudioExercises()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return;
+          }
+
+          if (id.includes("firebase/database")) {
+            return "firebase-database";
+          }
+
+          if (id.includes("firebase/")) {
+            return "firebase";
+          }
+
+          if (
+            id.includes("@chakra-ui") ||
+            id.includes("@emotion") ||
+            id.includes("framer-motion")
+          ) {
+            return "chakra";
+          }
+
+          if (id.includes("react-dom") || id.includes("/react/")) {
+            return "react";
+          }
+        }
+      }
+    }
+  }
 });

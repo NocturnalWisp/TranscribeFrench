@@ -1,7 +1,7 @@
 import { get, ref, update } from "firebase/database";
 import type { UserSessionState } from "../types/auth";
 import { clampSegmentsPerClip } from "../utils/whisperSegmentGroups";
-import { rtdb } from "./firebase";
+import { rtdb } from "./firebaseRtdb";
 
 const sessionRef = (uid: string) => ref(rtdb!, `users/${uid}/session`);
 

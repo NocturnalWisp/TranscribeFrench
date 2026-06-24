@@ -1,11 +1,10 @@
 import {
   GoogleAuthProvider,
-  onAuthStateChanged,
   signInWithPopup,
   signOut,
   type User
 } from "firebase/auth";
-import { auth } from "./firebase";
+import { auth } from "./firebaseAuth";
 import { ensureUserProfile } from "./users";
 
 const googleProvider = new GoogleAuthProvider();
@@ -26,16 +25,4 @@ export const signOutUser = async (): Promise<void> => {
   }
 
   await signOut(auth);
-};
-
-export const subscribeToAuthState = (
-  // eslint-disable-next-line no-unused-vars
-  onChange: (user: User | null) => void
-): (() => void) => {
-  if (!auth) {
-    onChange(null);
-    return () => undefined;
-  }
-
-  return onAuthStateChanged(auth, onChange);
 };

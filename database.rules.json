@@ -22,6 +22,21 @@
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
         ".write": "auth != null && auth.uid == $uid",
+        "email": {
+          ".validate": "newData.isString() || newData.val() == null"
+        },
+        "displayName": {
+          ".validate": "newData.isString() || newData.val() == null"
+        },
+        "photoURL": {
+          ".validate": "newData.isString() || newData.val() == null"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "lastLoginAt": {
+          ".validate": "newData.isNumber()"
+        },
         "session": {
           "exerciseId": {
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
@@ -40,6 +55,92 @@
           },
           "$other": {
             ".validate": false
+          }
+        },
+        "progress": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid",
+          "$exerciseId": {
+            "segments": {
+              "$segmentKey": {
+                "highScore": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+                },
+                "lastFirstGradeDate": {
+                  ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)"
+                },
+                "firstCompletedAt": {
+                  ".validate": "newData.isNumber()"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "missedSentences": {
+              "$sentenceKey": {
+                "segmentIndex": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+                },
+                "segmentsPerClip": {
+                  ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 10"
+                },
+                "missedWordCount": {
+                  ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 1000"
+                },
+                "updatedAt": {
+                  ".validate": "newData.isNumber()"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            }
+          }
+        },
+        "dailyStats": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid",
+          "$dateKey": {
+            "date": {
+              ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)"
+            },
+            "totalWords": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+            },
+            "missedWords": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+            },
+            "accuracyPercent": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+            },
+            "updatedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "missedWords": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid",
+          "$wordKey": {
+            "text": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+            },
+            "normalized": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+            },
+            "missCount": {
+              ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 1000000"
+            },
+            "lastMissedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
           }
         }
       }

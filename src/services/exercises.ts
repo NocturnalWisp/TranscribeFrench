@@ -1,8 +1,8 @@
-import { collection, getDocs, limit, query, where } from "firebase/firestore";
-import { loadFirstHostedExercise } from "./hostedExercises";
-import { db } from "./firebase";
+import { loadAuthenticatedExercise, loadExerciseById as loadRtdbExerciseById, loadTrialExercise } from "./rtdbExercises";
+import { loadLocalExercise, loadLocalExerciseById } from "./localExercises";
+import { isRealtimeDatabaseConfigured } from "./firebase";
+import type { AccessMode } from "../types/auth";
 import type { AudioExercise } from "../types";
-
 const fallbackExercises: AudioExercise[] = [
   {
     id: "fallback-1",
@@ -16,69 +16,55 @@ const fallbackExercises: AudioExercise[] = [
   }
 ];
 
-const normalizeExercise = (id: string, data: Record<string, unknown>): AudioExercise | null => {
-  const title = typeof data.title === "string" ? data.title : "";
-  const audioUrl = typeof data.audioUrl === "string" ? data.audioUrl : "";
-  const transcription = typeof data.transcription === "string" ? data.transcription : "";
-  const durationSeconds =
-    typeof data.durationSeconds === "number" ? Math.max(0, data.durationSeconds) : undefined;
-
-  if (!title || !audioUrl || !transcription) {
-    return null;
+const loadRemoteExercise = async (accessMode: AccessMode): Promise<AudioExercise> => {
+  if (accessMode === "trial") {
+    return loadTrialExercise();
   }
 
-  return {
-    id,
-    title,
-    audioUrl,
-    expectedTranscription: transcription,
-    language: "fr",
-    active: data.active !== false,
-    durationSeconds
-  };
+  return loadAuthenticatedExercise();
 };
 
-const loadFirestoreExercise = async (): Promise<AudioExercise | null> => {
-  if (!db) {
-    return null;
-  }
-
-  const exercisesQuery = query(
-    collection(db, "audioExercises"),
-    where("active", "==", true),
-    limit(20)
-  );
-  const snapshot = await getDocs(exercisesQuery);
-  const exercises = snapshot.docs
-    .map((document) => normalizeExercise(document.id, document.data()))
-    .filter((exercise): exercise is AudioExercise => exercise !== null);
-
-  if (exercises.length === 0) {
-    return null;
-  }
-
-  const randomIndex = Math.floor(Math.random() * exercises.length);
-  return exercises[randomIndex];
-};
-
-export const loadExercise = async (): Promise<AudioExercise> => {
-  try {
-    const hostedExercise = await loadFirstHostedExercise();
-    if (hostedExercise) {
-      return hostedExercise;
+export const loadExercise = async (accessMode: AccessMode): Promise<AudioExercise> => {
+  if (isRealtimeDatabaseConfigured) {
+    try {
+      return await loadRemoteExercise(accessMode);
+    } catch {
+      if (!import.meta.env.DEV) {
+        throw new Error("Unable to load exercise.");
+      }
     }
-  } catch {
-    // Fall through to Firestore and sample exercise.
   }
 
-  try {
-    const firestoreExercise = await loadFirestoreExercise();
-    if (firestoreExercise) {
-      return firestoreExercise;
+  if (import.meta.env.DEV) {
+    try {
+      return await loadLocalExercise(accessMode);
+    } catch {
+      // Fall through to sample exercise.
     }
-  } catch {
-    // Fall through to sample exercise.
   }
 
   return fallbackExercises[0];
+};
+
+export const loadExerciseById = async (exerciseId: string): Promise<AudioExercise | null> => {
+  if (isRealtimeDatabaseConfigured) {
+    try {
+      return await loadRtdbExerciseById(exerciseId);
+    } catch {
+      if (!import.meta.env.DEV) {
+        return null;
+      }
+    }
+  }
+
+  if (import.meta.env.DEV) {
+    try {
+      return await loadLocalExerciseById(exerciseId);
+    } catch {
+      return null;
+    }
+  }
+
+  const fallback = fallbackExercises.find((exercise) => exercise.id === exerciseId);
+  return fallback ?? null;
 };

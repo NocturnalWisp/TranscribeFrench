@@ -26,4 +26,5 @@ export type GradeResult = {
   characterSimilarityPercent: number;
   feedback: string;
   gradedWords: GradedWord[];
+  correctedWords: GradedWord[];
 };

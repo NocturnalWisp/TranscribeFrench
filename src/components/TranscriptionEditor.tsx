@@ -1,41 +1,92 @@
-import { Box, Button, Text, Textarea, VStack } from "@chakra-ui/react";
+import { forwardRef } from "react";
+import { Box, Text, Textarea, VStack } from "@chakra-ui/react";
 import type { GradedWord } from "../types";
 
 type TranscriptionEditorProps = {
   value: string;
   onChange: (value: string) => void;
-  onGrade: () => void;
-  canGrade: boolean;
-  gradedWords?: GradedWord[] | null;
+  isGraded?: boolean;
+  submittedText?: string;
+  correctedWords?: GradedWord[] | null;
+  onFocus?: () => void;
+  onBlur?: () => void;
 };
 
-export function TranscriptionEditor({
-  value,
-  onChange,
-  onGrade,
-  canGrade,
-  gradedWords
-}: TranscriptionEditorProps) {
+function WordHighlight({ words }: { words: GradedWord[] }) {
   return (
-    <Box
-      as="section"
-      flex={1}
-      display="flex"
-      flexDirection="column"
-      minH={0}
-      px={4}
-      py={3}
-    >
-      <VStack align="stretch" spacing={3} flex={1} minH={0}>
-        <Text fontSize="sm" fontWeight="semibold" color="gray.700">
-          Your transcription
+    <Text fontSize="md" lineHeight="tall">
+      {words.map((word, index) => (
+        <Text
+          as="span"
+          key={`${word.text}-${index}`}
+          color={word.isCorrect ? "gray.800" : "red.500"}
+          fontWeight={word.isCorrect ? "normal" : "bold"}
+          textDecoration={word.isCorrect ? "none" : "underline"}
+          textDecorationStyle={word.isCorrect ? undefined : "solid"}
+          textDecorationThickness={word.isCorrect ? undefined : "2px"}
+          textUnderlineOffset={word.isCorrect ? undefined : "3px"}
+          bg={word.isCorrect ? "transparent" : "blackAlpha.100"}
+          px={word.isCorrect ? 0 : 0.5}
+          borderRadius={word.isCorrect ? undefined : "sm"}
+        >
+          {word.text}
+          {index < words.length - 1 ? " " : ""}
         </Text>
+      ))}
+    </Text>
+  );
+}
+
+export const TranscriptionEditor = forwardRef<HTMLTextAreaElement, TranscriptionEditorProps>(
+  function TranscriptionEditor(
+    { value, onChange, isGraded = false, submittedText = "", correctedWords, onFocus, onBlur },
+    ref
+  ) {
+    return (
+      <Box
+        as="section"
+        flex={1}
+        display="flex"
+        flexDirection="column"
+        minH={0}
+        px={4}
+        pt={2}
+        pb={2}
+        overflow="hidden"
+        position="relative"
+      >
+        {isGraded ? (
+          <VStack align="stretch" spacing={4} flex={1} overflowY="auto" pt={1} pb={2}>
+            <Box>
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" mb={1}>
+                Your answer
+              </Text>
+              <Text fontSize="md" lineHeight="tall" color="gray.800">
+                {submittedText}
+              </Text>
+            </Box>
+
+            {correctedWords && correctedWords.length > 0 ? (
+              <Box>
+                <Text fontSize="xs" fontWeight="semibold" color="gray.500" mb={1}>
+                  Correct answer
+                </Text>
+                <WordHighlight words={correctedWords} />
+              </Box>
+            ) : null}
+          </VStack>
+        ) : null}
+
         <Textarea
+          ref={ref}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onFocus={onFocus}
+          onBlur={onBlur}
           placeholder="Type what you hear in French…"
-          flex={1}
-          minH={{ base: "140px", md: "200px" }}
+          flex={isGraded ? undefined : 1}
+          minH={isGraded ? "1px" : 0}
+          h={isGraded ? "1px" : undefined}
           resize="none"
           fontSize="16px"
           lineHeight="tall"
@@ -46,42 +97,14 @@ export function TranscriptionEditor({
           autoCapitalize="sentences"
           autoCorrect="on"
           spellCheck
+          position={isGraded ? "absolute" : "relative"}
+          opacity={isGraded ? 0 : 1}
+          pointerEvents={isGraded ? "none" : "auto"}
+          overflow={isGraded ? "hidden" : undefined}
+          p={isGraded ? 0 : undefined}
+          border={isGraded ? "none" : undefined}
         />
-
-        {gradedWords && gradedWords.length > 0 ? (
-          <Box bg="gray.50" borderRadius="md" px={3} py={2}>
-            <Text fontSize="xs" fontWeight="semibold" color="gray.500" mb={1}>
-              Incorrect words highlighted
-            </Text>
-            <Text fontSize="sm" lineHeight="tall">
-              {gradedWords.map((word, index) => (
-                <Text
-                  as="span"
-                  key={`${word.text}-${index}`}
-                  color={word.isCorrect ? "gray.800" : "red.500"}
-                  fontWeight={word.isCorrect ? "normal" : "semibold"}
-                >
-                  {word.text}
-                  {index < gradedWords.length - 1 ? " " : ""}
-                </Text>
-              ))}
-            </Text>
-          </Box>
-        ) : null}
-
-        <Text fontSize="xs" color="gray.500">
-          Grade this clip, then edit and grade again until it looks right.
-        </Text>
-        <Button
-          size="touch"
-          colorScheme="green"
-          w="full"
-          onClick={onGrade}
-          isDisabled={!canGrade}
-        >
-          Grade this clip
-        </Button>
-      </VStack>
-    </Box>
-  );
-}
+      </Box>
+    );
+  }
+);

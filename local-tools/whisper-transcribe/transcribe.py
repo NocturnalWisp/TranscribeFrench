@@ -19,11 +19,9 @@ import whisper
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_EXERCISES_DIR = REPO_ROOT / "public" / "audio-exercises"
+DEFAULT_EXERCISES_DIR = REPO_ROOT / "content" / "audio-exercises"
 DEFAULT_TRANSCRIPTS_DIR = DEFAULT_EXERCISES_DIR / "transcripts"
 DEFAULT_MANIFEST_PATH = DEFAULT_EXERCISES_DIR / "manifest.json"
-HOSTING_AUDIO_BASE_PATH = "/audio-exercises"
-HOSTING_TRANSCRIPT_BASE_PATH = "/audio-exercises/transcripts"
 
 SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".webm", ".mp4", ".mkv"}
 WHISPER_SAMPLE_RATE = 16000
@@ -325,8 +323,8 @@ def build_manifest_entry(audio_path: Path, transcription: str) -> dict:
     return {
         "id": audio_path.stem,
         "title": title_from_filename(audio_path.stem),
-        "audioUrl": f"{HOSTING_AUDIO_BASE_PATH}/{audio_name}",
-        "transcriptUrl": f"{HOSTING_TRANSCRIPT_BASE_PATH}/{audio_path.stem}.txt",
+        "audioUrl": audio_name,
+        "transcriptUrl": f"transcripts/{audio_path.stem}.txt",
         "transcription": transcription,
         "active": True,
     }

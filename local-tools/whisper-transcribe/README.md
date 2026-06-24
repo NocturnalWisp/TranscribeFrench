@@ -1,6 +1,6 @@
 # Whisper Transcription (local only)
 
-Local Python tool for generating French transcriptions from audio files. This folder lives in the repo for version control but is **not deployed** to Firebase Hosting (only the Vite `dist/` build is published).
+Local Python tool for generating French transcriptions from audio files. This folder lives in the repo for version control but is **not deployed** to Firebase Hosting.
 
 ## Setup
 
@@ -33,7 +33,7 @@ Always use the virtual environment Python, not the system `python` command.
 
 ### Batch mode (default)
 
-Drop audio files into `public/audio-exercises/`, then transcribe everything:
+Drop audio files into `content/audio-exercises/`, then transcribe everything:
 
 ```powershell
 .\transcribe.ps1 -All
@@ -41,15 +41,15 @@ Drop audio files into `public/audio-exercises/`, then transcribe everything:
 
 This writes:
 
-- `public/audio-exercises/transcripts/<name>.txt` — plain text for Firestore
-- `public/audio-exercises/transcripts/<name>.json` — full Whisper output
-- `public/audio-exercises/manifest.json` — hosted URLs and transcription text
+- `content/audio-exercises/transcripts/<name>.txt` — plain text transcription
+- `content/audio-exercises/transcripts/<name>.json` — full Whisper output
+- `content/audio-exercises/manifest.json` — local manifest used by the seed script
 
 Re-run with `-Force` to overwrite existing transcripts.
 
 ### Single file
 
-Pass any audio path. Files outside `public/audio-exercises/` are copied there first, then transcribed:
+Pass any audio path. Files outside `content/audio-exercises/` are copied there first, then transcribed:
 
 ```powershell
 .\transcribe.ps1 "C:\Users\helmt\Downloads\01_LCP001_-_Apprendre_le_francais (1).mp3"
@@ -58,26 +58,22 @@ Pass any audio path. Files outside `public/audio-exercises/` are copied there fi
 Or target a file already in the exercises folder:
 
 ```powershell
-.\transcribe.ps1 "..\..\public\audio-exercises\my-audio.mp3"
+.\transcribe.ps1 "..\..\content\audio-exercises\my-audio.mp3"
 ```
 
 Use `-Force` to replace an existing copied audio file and regenerate its transcript.
 
-## Deploy audio to Firebase Hosting
+## Sync audio to Firebase
 
 After transcribing:
 
 ```powershell
 cd ..\..
-npm run deploy:hosting
+npm run seed
+npm run deploy
 ```
 
-Hosted files are served from:
-
-- `https://transcribefrench.web.app/audio-exercises/<filename>`
-- `https://transcribefrench.web.app/audio-exercises/transcripts/<filename>.txt`
-
-Use values from `public/audio-exercises/manifest.json` when creating Firestore `audioExercises` documents.
+Audio is uploaded to Firebase Storage and exercise metadata is written to Realtime Database. Hosting only serves the React app.
 
 ## Supported audio formats
 

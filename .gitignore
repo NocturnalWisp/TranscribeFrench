@@ -4,5 +4,6 @@ dist
 .env.local
 .env.production
 .firebase
+scripts/service-account.json
 .DS_Store
 *.log

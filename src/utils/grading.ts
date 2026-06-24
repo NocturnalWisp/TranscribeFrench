@@ -55,13 +55,74 @@ const scoreToFeedback = (score: number): string => {
   return "Keep practicing. Slow down and replay short segments to improve recognition.";
 };
 
+type WordAlignment = {
+  matchedExpectedIndices: Set<number>;
+  matchedSubmittedIndices: Set<number>;
+};
+
+const alignWords = (expectedWords: string[], submittedWords: string[]): WordAlignment => {
+  const expectedCount = expectedWords.length;
+  const submittedCount = submittedWords.length;
+  const scores = Array.from({ length: expectedCount + 1 }, () =>
+    new Array<number>(submittedCount + 1).fill(0)
+  );
+
+  for (let expectedIndex = 1; expectedIndex <= expectedCount; expectedIndex += 1) {
+    for (let submittedIndex = 1; submittedIndex <= submittedCount; submittedIndex += 1) {
+      if (expectedWords[expectedIndex - 1] === submittedWords[submittedIndex - 1]) {
+        scores[expectedIndex][submittedIndex] =
+          scores[expectedIndex - 1][submittedIndex - 1] + 1;
+      } else {
+        scores[expectedIndex][submittedIndex] = Math.max(
+          scores[expectedIndex - 1][submittedIndex],
+          scores[expectedIndex][submittedIndex - 1]
+        );
+      }
+    }
+  }
+
+  const matchedExpectedIndices = new Set<number>();
+  const matchedSubmittedIndices = new Set<number>();
+  let expectedIndex = expectedCount;
+  let submittedIndex = submittedCount;
+
+  while (expectedIndex > 0 && submittedIndex > 0) {
+    if (expectedWords[expectedIndex - 1] === submittedWords[submittedIndex - 1]) {
+      matchedExpectedIndices.add(expectedIndex - 1);
+      matchedSubmittedIndices.add(submittedIndex - 1);
+      expectedIndex -= 1;
+      submittedIndex -= 1;
+    } else if (scores[expectedIndex - 1][submittedIndex] >= scores[expectedIndex][submittedIndex - 1]) {
+      expectedIndex -= 1;
+    } else {
+      submittedIndex -= 1;
+    }
+  }
+
+  return { matchedExpectedIndices, matchedSubmittedIndices };
+};
+
 export const gradeWords = (expected: string, submitted: string): GradedWord[] => {
   const expectedWords = normalizeText(expected).split(" ").filter(Boolean);
   const submittedTokens = submitted.match(/\S+/g) ?? [];
+  const submittedWords = submittedTokens.map((token) => normalizeText(token));
+  const { matchedSubmittedIndices } = alignWords(expectedWords, submittedWords);
 
   return submittedTokens.map((token, index) => ({
     text: token,
-    isCorrect: normalizeText(token) === (expectedWords[index] ?? "")
+    isCorrect: matchedSubmittedIndices.has(index)
+  }));
+};
+
+export const gradeExpectedWords = (expected: string, submitted: string): GradedWord[] => {
+  const expectedTokens = expected.match(/\S+/g) ?? [];
+  const expectedWords = normalizeText(expected).split(" ").filter(Boolean);
+  const submittedWords = normalizeText(submitted).split(" ").filter(Boolean);
+  const { matchedExpectedIndices } = alignWords(expectedWords, submittedWords);
+
+  return expectedTokens.map((token, index) => ({
+    text: token,
+    isCorrect: matchedExpectedIndices.has(index)
   }));
 };
 
@@ -76,25 +137,17 @@ export const gradeTranscription = (expected: string, submitted: string): GradeRe
       wordMatchPercent: 0,
       characterSimilarityPercent: 0,
       feedback: "No transcription detected. Type what you hear and grade again.",
-      gradedWords: []
+      gradedWords: [],
+      correctedWords: gradeExpectedWords(expected, submitted)
     };
   }
 
   const expectedWords = normalizedExpected.split(" ").filter(Boolean);
   const submittedWords = normalizedSubmitted.split(" ").filter(Boolean);
+  const { matchedExpectedIndices, matchedSubmittedIndices } = alignWords(expectedWords, submittedWords);
 
-  const expectedSet = new Set(expectedWords);
-  const submittedSet = new Set(submittedWords);
-  let intersectionCount = 0;
-
-  for (const word of submittedSet) {
-    if (expectedSet.has(word)) {
-      intersectionCount += 1;
-    }
-  }
-
-  const precision = intersectionCount / Math.max(1, submittedSet.size);
-  const recall = intersectionCount / Math.max(1, expectedSet.size);
+  const recall = matchedExpectedIndices.size / Math.max(1, expectedWords.length);
+  const precision = matchedSubmittedIndices.size / Math.max(1, submittedWords.length);
   const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
 
   const editDistance = levenshteinDistance(normalizedSubmitted, normalizedExpected);
@@ -108,6 +161,7 @@ export const gradeTranscription = (expected: string, submitted: string): GradeRe
     wordMatchPercent: Math.round(f1 * 100),
     characterSimilarityPercent: Math.round(charSimilarity * 100),
     feedback: scoreToFeedback(weightedScore),
-    gradedWords
+    gradedWords,
+    correctedWords: gradeExpectedWords(expected, submitted)
   };
 };

@@ -1,0 +1,44 @@
+{
+  "rules": {
+    "config": {
+      "trialExerciseId": {
+        ".read": true,
+        ".write": false
+      }
+    },
+    "audioExercises": {
+      ".read": "auth != null && auth.token.firebase.sign_in_provider == 'google.com'",
+      ".indexOn": ["active", "order"],
+      "$exerciseId": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider == 'google.com' || $exerciseId == root.child('config/trialExerciseId').val()",
+        ".write": false
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        "session": {
+          "exerciseId": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+          },
+          "segmentIndex": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+          },
+          "segmentsPerClip": {
+            ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 10"
+          },
+          "transcriptionInput": {
+            ".validate": "newData.isString() && newData.val().length <= 10000"
+          },
+          "updatedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    }
+  }
+}

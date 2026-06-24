@@ -4,6 +4,12 @@ export type WhisperSegment = {
   text: string;
 };
 
+export type ExerciseSummary = {
+  id: string;
+  title: string;
+  order?: number;
+};
+
 export type AudioExercise = {
   id: string;
   title: string;

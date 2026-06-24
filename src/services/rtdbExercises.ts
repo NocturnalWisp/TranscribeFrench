@@ -1,7 +1,7 @@
 import { get, ref } from "firebase/database";
 import { enrichExerciseWithTranscript } from "./exerciseEnrichment";
 import { rtdb } from "./firebase";
-import type { AudioExercise, WhisperSegment } from "../types";
+import type { AudioExercise, ExerciseSummary, WhisperSegment } from "../types";
 
 type RtdbExerciseRecord = {
   title?: unknown;
@@ -12,6 +12,35 @@ type RtdbExerciseRecord = {
   order?: unknown;
   transcriptUrl?: unknown;
   whisperSegments?: unknown;
+};
+
+type RtdbCatalogRecord = {
+  title?: unknown;
+  active?: unknown;
+  order?: unknown;
+};
+
+const normalizeCatalogEntry = (id: string, data: RtdbCatalogRecord): ExerciseSummary | null => {
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title || data.active === false) {
+    return null;
+  }
+
+  const order = typeof data.order === "number" && Number.isFinite(data.order) ? data.order : undefined;
+
+  return { id, title, order };
+};
+
+const sortExerciseSummaries = (entries: ExerciseSummary[]): ExerciseSummary[] => {
+  return [...entries].sort((left, right) => {
+    const leftOrder = left.order ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = right.order ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    return left.title.localeCompare(right.title, "fr");
+  });
 };
 
 const normalizeWhisperSegments = (value: unknown): WhisperSegment[] | undefined => {
@@ -137,26 +166,23 @@ export const loadTrialExercise = async (): Promise<AudioExercise> => {
   return exercise;
 };
 
-export const loadAuthenticatedExercise = async (): Promise<AudioExercise> => {
+export const listExerciseCatalog = async (): Promise<ExerciseSummary[]> => {
   if (!rtdb) {
     throw new Error("Realtime Database is not configured.");
   }
 
-  const snapshot = await get(ref(rtdb, "audioExercises"));
+  const snapshot = await get(ref(rtdb, "exerciseCatalog"));
   if (!snapshot.exists()) {
     throw new Error("No exercises are available.");
   }
 
-  const exercises = Object.entries(snapshot.val() as Record<string, RtdbExerciseRecord>)
-    .map(([id, data]) => normalizeExercise(id, data))
-    .filter((exercise): exercise is AudioExercise => exercise !== null && exercise.active !== false);
+  const entries = Object.entries(snapshot.val() as Record<string, RtdbCatalogRecord>)
+    .map(([id, data]) => normalizeCatalogEntry(id, data))
+    .filter((entry): entry is ExerciseSummary => entry !== null);
 
-  if (exercises.length === 0) {
+  if (entries.length === 0) {
     throw new Error("No active exercises are available.");
   }
 
-  const randomIndex = Math.floor(Math.random() * exercises.length);
-  const selected = exercises[randomIndex];
-  const rawData = (snapshot.val() as Record<string, RtdbExerciseRecord>)[selected.id];
-  return maybeEnrichExercise(selected, rawData);
+  return sortExerciseSummaries(entries);
 };

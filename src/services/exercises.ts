@@ -1,8 +1,16 @@
-import { loadAuthenticatedExercise, loadExerciseById as loadRtdbExerciseById, loadTrialExercise } from "./rtdbExercises";
-import { loadLocalExercise, loadLocalExerciseById } from "./localExercises";
+import {
+  listExerciseCatalog as listRtdbExerciseCatalog,
+  loadExerciseById as loadRtdbExerciseById,
+  loadTrialExercise
+} from "./rtdbExercises";
+import {
+  listLocalExerciseCatalog,
+  loadLocalExercise,
+  loadLocalExerciseById
+} from "./localExercises";
 import { isRealtimeDatabaseConfigured } from "./firebase";
 import type { AccessMode } from "../types/auth";
-import type { AudioExercise } from "../types";
+import type { AudioExercise, ExerciseSummary } from "../types";
 const fallbackExercises: AudioExercise[] = [
   {
     id: "fallback-1",
@@ -16,18 +24,54 @@ const fallbackExercises: AudioExercise[] = [
   }
 ];
 
-const loadRemoteExercise = async (accessMode: AccessMode): Promise<AudioExercise> => {
+const loadRemoteExercise = async (accessMode: AccessMode, exerciseId?: string): Promise<AudioExercise> => {
   if (accessMode === "trial") {
     return loadTrialExercise();
   }
 
-  return loadAuthenticatedExercise();
+  if (exerciseId) {
+    const exercise = await loadRtdbExerciseById(exerciseId);
+    if (!exercise) {
+      throw new Error("Exercise is not available.");
+    }
+
+    return exercise;
+  }
+
+  const catalog = await listRtdbExerciseCatalog();
+  const exercise = await loadRtdbExerciseById(catalog[0].id);
+  if (!exercise) {
+    throw new Error("Exercise is not available.");
+  }
+
+  return exercise;
 };
 
-export const loadExercise = async (accessMode: AccessMode): Promise<AudioExercise> => {
+export const listExerciseCatalog = async (): Promise<ExerciseSummary[]> => {
   if (isRealtimeDatabaseConfigured) {
     try {
-      return await loadRemoteExercise(accessMode);
+      return await listRtdbExerciseCatalog();
+    } catch {
+      if (!import.meta.env.DEV) {
+        throw new Error("Unable to load exercise catalog.");
+      }
+    }
+  }
+
+  if (import.meta.env.DEV) {
+    return listLocalExerciseCatalog();
+  }
+
+  return [];
+};
+
+export const loadExercise = async (
+  accessMode: AccessMode,
+  exerciseId?: string
+): Promise<AudioExercise> => {
+  if (isRealtimeDatabaseConfigured) {
+    try {
+      return await loadRemoteExercise(accessMode, exerciseId);
     } catch {
       if (!import.meta.env.DEV) {
         throw new Error("Unable to load exercise.");
@@ -37,6 +81,13 @@ export const loadExercise = async (accessMode: AccessMode): Promise<AudioExercis
 
   if (import.meta.env.DEV) {
     try {
+      if (accessMode === "full" && exerciseId) {
+        const exercise = await loadLocalExerciseById(exerciseId);
+        if (exercise) {
+          return exercise;
+        }
+      }
+
       return await loadLocalExercise(accessMode);
     } catch {
       // Fall through to sample exercise.

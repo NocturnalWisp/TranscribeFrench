@@ -336,6 +336,11 @@ async function seedExercise({ database, bucket, bucketName, entry, order }) {
   });
 
   await database.ref(`audioExercises/${entry.id}`).set(record);
+  await database.ref(`exerciseCatalog/${entry.id}`).set({
+    title: entry.title,
+    active: true,
+    order
+  });
 
   return {
     id: entry.id,

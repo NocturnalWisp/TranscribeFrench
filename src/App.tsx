@@ -8,10 +8,14 @@ import { TranscriptionEditor } from "./components/TranscriptionEditor";
 import { useAudioSegmentPlayer } from "./hooks/useAudioSegmentPlayer";
 import { useAuth } from "./hooks/useAuth";
 import { signOutUser } from "./services/auth";
-import { loadExercise as fetchExercise, loadExerciseById } from "./services/exercises";
+import {
+  listExerciseCatalog,
+  loadExercise as fetchExercise,
+  loadExerciseById
+} from "./services/exercises";
 import { getUserSessionState, saveUserSessionState } from "./services/userSession";
 import { gradeTranscription } from "./utils/grading";
-import type { AudioExercise, GradeResult } from "./types";
+import type { AudioExercise, ExerciseSummary, GradeResult } from "./types";
 import type { UserSessionState } from "./types/auth";
 
 function App() {
@@ -29,13 +33,23 @@ function App() {
   const isGradedRef = useRef(false);
   const pendingSessionRestoreRef = useRef<UserSessionState | null>(null);
   const [isSessionRestored, setIsSessionRestored] = useState(false);
+  const [exerciseCatalog, setExerciseCatalog] = useState<ExerciseSummary[]>([]);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
 
   const audio = useAudioSegmentPlayer({
     exercise,
     onPlaybackError: (message) => setLoadError(message)
   });
 
-  const loadExercise = async (mode: NonNullable<typeof accessMode>) => {
+  const loadExercise = async (
+    mode: NonNullable<typeof accessMode>,
+    options?: {
+      preferredExerciseId?: string | null;
+      catalog?: ExerciseSummary[];
+    }
+  ) => {
+    const catalog = options?.catalog ?? exerciseCatalog;
+    const preferredExerciseId = options?.preferredExerciseId;
     setIsLoadingExercise(true);
     setLoadError(null);
     setGradeResult(null);
@@ -47,22 +61,44 @@ function App() {
 
     try {
       let nextExercise: AudioExercise | null = null;
+      let sessionToRestore: UserSessionState | null = null;
+      let exerciseId = preferredExerciseId?.trim() || null;
 
       if (mode === "full" && user) {
-        const session = await getUserSessionState(user.uid);
-        if (session?.exerciseId) {
-          nextExercise = await loadExerciseById(session.exerciseId);
-          if (nextExercise) {
-            pendingSessionRestoreRef.current = session;
+        if (!exerciseId) {
+          const session = await getUserSessionState(user.uid);
+          if (session?.exerciseId) {
+            exerciseId = session.exerciseId;
+            sessionToRestore = session;
           }
+        }
+
+        if (!exerciseId && catalog.length > 0) {
+          exerciseId = catalog[0].id;
+        }
+      }
+
+      if (exerciseId) {
+        nextExercise = await loadExerciseById(exerciseId);
+        if (nextExercise && sessionToRestore?.exerciseId === nextExercise.id) {
+          pendingSessionRestoreRef.current = sessionToRestore;
         }
       }
 
       if (!nextExercise) {
-        nextExercise = await fetchExercise(mode);
+        nextExercise = await fetchExercise(mode, exerciseId ?? undefined);
       }
 
       setExercise(nextExercise);
+
+      if (mode === "full" && user && nextExercise && !sessionToRestore) {
+        await saveUserSessionState(user.uid, {
+          exerciseId: nextExercise.id,
+          segmentIndex: 0,
+          segmentsPerClip: 1,
+          transcriptionInput: ""
+        });
+      }
     } catch {
       setLoadError(
         mode === "trial"
@@ -70,6 +106,43 @@ function App() {
           : "Unable to load an exercise."
       );
       setExercise(null);
+    } finally {
+      setIsLoadingExercise(false);
+    }
+  };
+
+  const handleExerciseSelect = async (exerciseId: string) => {
+    if (!user || isTrial || exercise?.id === exerciseId) {
+      return;
+    }
+
+    setIsLoadingExercise(true);
+    setLoadError(null);
+    setGradeResult(null);
+    setGradedSubmission("");
+    setTranscriptionInput("");
+    audio.pauseAudio();
+    audio.resetSegment();
+    setIsSessionRestored(false);
+    pendingSessionRestoreRef.current = null;
+
+    try {
+      const nextExercise = await loadExerciseById(exerciseId);
+      if (!nextExercise) {
+        setLoadError("Unable to load the selected exercise.");
+        return;
+      }
+
+      setExercise(nextExercise);
+      await saveUserSessionState(user.uid, {
+        exerciseId: nextExercise.id,
+        segmentIndex: 0,
+        segmentsPerClip: 1,
+        transcriptionInput: ""
+      });
+      setIsSessionRestored(true);
+    } catch {
+      setLoadError("Unable to load the selected exercise.");
     } finally {
       setIsLoadingExercise(false);
     }
@@ -189,6 +262,7 @@ function App() {
     audio.pauseAudio();
     restoredAccessRef.current = false;
     clearAccess();
+    setExerciseCatalog([]);
     setExercise(null);
     setLoadError(null);
     setGradeResult(null);
@@ -200,7 +274,24 @@ function App() {
   const beginSession = async (mode: NonNullable<typeof accessMode>) => {
     restoredAccessRef.current = true;
     setAccessMode(mode);
-    await loadExercise(mode);
+
+    let catalog: ExerciseSummary[] = [];
+    if (mode === "full") {
+      setIsLoadingCatalog(true);
+      try {
+        catalog = await listExerciseCatalog();
+        setExerciseCatalog(catalog);
+      } catch {
+        setExerciseCatalog([]);
+        setLoadError("Unable to load the exercise list.");
+      } finally {
+        setIsLoadingCatalog(false);
+      }
+    } else {
+      setExerciseCatalog([]);
+    }
+
+    await loadExercise(mode, { catalog });
   };
 
   useEffect(() => {
@@ -209,7 +300,25 @@ function App() {
     }
 
     restoredAccessRef.current = true;
-    void loadExercise(accessMode);
+
+    const restoreSession = async () => {
+      let catalog: ExerciseSummary[] = [];
+      if (accessMode === "full") {
+        setIsLoadingCatalog(true);
+        try {
+          catalog = await listExerciseCatalog();
+          setExerciseCatalog(catalog);
+        } catch {
+          setExerciseCatalog([]);
+        } finally {
+          setIsLoadingCatalog(false);
+        }
+      }
+
+      await loadExercise(accessMode, { catalog });
+    };
+
+    void restoreSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authReady, hasAccess, accessMode, user?.uid]);
 
@@ -290,6 +399,11 @@ function App() {
         user={user}
         isTrial={isTrial}
         onLeave={() => void handleLeaveSession()}
+        exercises={!isTrial && user ? exerciseCatalog : undefined}
+        selectedExerciseId={exercise?.id}
+        isLoadingExercises={isLoadingCatalog}
+        isExerciseLoading={isLoadingExercise}
+        onSelectExercise={(exerciseId) => void handleExerciseSelect(exerciseId)}
       />
 
       {loadError ? (

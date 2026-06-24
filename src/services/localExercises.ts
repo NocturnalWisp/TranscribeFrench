@@ -1,6 +1,6 @@
 import { enrichExerciseWithTranscript, type ExerciseManifestEntry } from "./exerciseEnrichment";
 import type { AccessMode } from "../types/auth";
-import type { AudioExercise } from "../types";
+import type { AudioExercise, ExerciseSummary } from "../types";
 
 export const LOCAL_AUDIO_EXERCISES_BASE = "/local-audio-exercises";
 
@@ -52,6 +52,23 @@ const loadManifest = async (): Promise<ExerciseManifestEntry[]> => {
   return manifest.exercises.filter((entry) => entry.active !== false);
 };
 
+export const listLocalExerciseCatalog = async (): Promise<ExerciseSummary[]> => {
+  const entries = await loadManifest();
+
+  return entries
+    .map((entry, index) => {
+      const title =
+        typeof entry.title === "string" && entry.title.trim() ? entry.title.trim() : entry.id;
+
+      return {
+        id: entry.id,
+        title,
+        order: index + 1
+      };
+    })
+    .sort((left, right) => left.title.localeCompare(right.title, "fr"));
+};
+
 const enrichLocalEntry = async (
   exercise: AudioExercise,
   entry: ExerciseManifestEntry
@@ -68,10 +85,7 @@ const enrichLocalEntry = async (
 
 export const loadLocalExercise = async (accessMode: AccessMode): Promise<AudioExercise> => {
   const entries = await loadManifest();
-  const entry =
-    accessMode === "trial"
-      ? entries[0]
-      : entries[Math.floor(Math.random() * entries.length)];
+  const entry = accessMode === "trial" ? entries[0] : entries[0];
 
   const exercise = normalizeLocalEntry(entry);
   if (!exercise) {

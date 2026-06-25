@@ -319,6 +319,7 @@ export function useAudioSegmentPlayer({ exercise, onPlaybackError }: UseAudioSeg
     canGoPrevious,
     canGoNext,
     segmentCount: hasWhisperSegments ? whisperSegmentCount : playbackSegments.length,
+    clipCount: playbackSegments.length,
     segmentProgressPercent,
     playSegment,
     goNextSegment,

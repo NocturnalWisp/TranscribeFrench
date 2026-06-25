@@ -3,9 +3,9 @@
  * Upload local audio exercises to Firebase Storage and sync metadata to Realtime Database.
  *
  * Credentials (first match wins):
- *   1. GOOGLE_APPLICATION_CREDENTIALS
+ *   1. GOOGLE_APPLICATION_CREDENTIALS (if the file exists)
  *   2. scripts/service-account.json
- *   3. Application Default Credentials (gcloud auth application-default login)
+ *   3. Application Default Credentials (only when GOOGLE_APPLICATION_CREDENTIALS is set but missing on disk)
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -217,13 +217,29 @@ function readTranscriptFiles(entry) {
   return { transcription, whisperSegments, transcriptJson };
 }
 
+function loadServiceAccountCert(path) {
+  return cert(JSON.parse(readFileSync(path, "utf8")));
+}
+
 function resolveCredential() {
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    return applicationDefault();
+  const envCredentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+  if (envCredentialsPath && existsSync(envCredentialsPath)) {
+    return loadServiceAccountCert(envCredentialsPath);
+  }
+
+  if (envCredentialsPath) {
+    console.warn(
+      `Warning: GOOGLE_APPLICATION_CREDENTIALS points to a missing file (${envCredentialsPath}). ` +
+        "Falling back to scripts/service-account.json."
+    );
   }
 
   if (existsSync(SERVICE_ACCOUNT_PATH)) {
-    return cert(JSON.parse(readFileSync(SERVICE_ACCOUNT_PATH, "utf8")));
+    return loadServiceAccountCert(SERVICE_ACCOUNT_PATH);
+  }
+
+  if (envCredentialsPath) {
+    return applicationDefault();
   }
 
   throw new Error(

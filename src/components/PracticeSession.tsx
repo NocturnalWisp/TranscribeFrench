@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { User } from "firebase/auth";
-import { Alert, AlertIcon, Box, Flex } from "@chakra-ui/react";
+import { Alert, AlertIcon, Box, Flex, useToast } from "@chakra-ui/react";
 import { keepKeyboardOpen } from "../utils/keepKeyboardOpen";
 import { AppHeader } from "./AppHeader";
 import { AudioControls } from "./AudioControls";
@@ -10,6 +10,7 @@ import {
   type GradeHighlight
 } from "./SegmentProgressBar";
 import { TranscriptionEditor } from "./TranscriptionEditor";
+import { IncorrectTranslationReportModal } from "./IncorrectTranslationReportModal";
 import { useAudioSegmentPlayer } from "../hooks/useAudioSegmentPlayer";
 import { signOutUser } from "../services/authActions";
 import {
@@ -26,6 +27,7 @@ import {
   subscribeDailyStats
 } from "../services/userProgress";
 import { getUserSessionState, saveUserSessionState } from "../services/userSession";
+import { reportIncorrectTranslation } from "../services/supportReports";
 import { getLocalDateKey } from "../utils/dateKey";
 import { computeDailyStatsUpdate } from "../utils/dailyStats";
 import {
@@ -33,11 +35,13 @@ import {
   extractMissedExpectedWords,
   gradeTranscription
 } from "../utils/grading";
+import { pickRandomSegmentClipIndex } from "../utils/randomSegment";
 import {
   computeUpdatedSegmentProgress,
   canBeatHighScoreToday,
   segmentProgressKey
 } from "../utils/segmentProgress";
+import { snapToClipStart } from "../utils/whisperSegmentGroups";
 import type { AudioExercise, ExerciseSummary, GradeResult } from "../types";
 import type {
   DailyStats,
@@ -80,6 +84,10 @@ export default function PracticeSession({
   const [missedWords, setMissedWords] = useState<Record<string, MissedWordEntry>>({});
   const [gradeHighlight, setGradeHighlight] = useState<GradeHighlight>(null);
   const [isMissedListOpen, setIsMissedListOpen] = useState(false);
+  const [reportWord, setReportWord] = useState<string | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const toast = useToast();
 
   const audio = useAudioSegmentPlayer({
     exercise,
@@ -600,6 +608,25 @@ export default function PracticeSession({
     [allExerciseProgress, exercise?.id]
   );
 
+  const handleRandomSegment = () => {
+    const clipIndex = pickRandomSegmentClipIndex({
+      clipCount: audio.clipCount,
+      currentClipIndex: audio.progressClipIndex,
+      segmentsPerClip: audio.segmentsPerClip,
+      exerciseProgress
+    });
+
+    if (clipIndex === null) {
+      return;
+    }
+
+    const hasWhisperSegments = Boolean(exercise?.whisperSegments?.length);
+    const segmentIndex = hasWhisperSegments
+      ? snapToClipStart(clipIndex * audio.segmentsPerClip, audio.segmentsPerClip)
+      : clipIndex;
+    handleSelectSegment(segmentIndex);
+  };
+
   const currentSegmentProgress = useMemo(() => {
     if (!exerciseProgress) {
       return null;
@@ -649,6 +676,70 @@ export default function PracticeSession({
     [missedSegments]
   );
 
+  const canReportWords = Boolean(user && !isTrial && isGraded && exercise?.audioUrl);
+
+  const handleWordClick = (word: string) => {
+    if (!canReportWords) {
+      return;
+    }
+
+    setReportWord(word);
+    setIsReportModalOpen(true);
+  };
+
+  const handleCloseReportModal = () => {
+    if (isSubmittingReport) {
+      return;
+    }
+
+    setIsReportModalOpen(false);
+    setReportWord(null);
+  };
+
+  const handleSubmitIncorrectTranslationReport = async () => {
+    if (!reportWord || !exercise?.audioUrl || !user) {
+      return;
+    }
+
+    setIsSubmittingReport(true);
+
+    try {
+      const result = await reportIncorrectTranslation({
+        word: reportWord,
+        segmentText: audio.currentSegmentText,
+        segmentIndex: audio.safeSegmentIndex,
+        segmentsPerClip: audio.segmentsPerClip,
+        exerciseId: exercise.id,
+        exerciseTitle: exercise.title,
+        audioUrl: exercise.audioUrl
+      });
+
+      toast({
+        title: "Report sent",
+        description: result.emailSent
+          ? "Thanks — we'll review this translation."
+          : "Your report was saved. Email notification is temporarily unavailable.",
+        status: result.emailSent ? "success" : "warning",
+        duration: 5000,
+        isClosable: true
+      });
+      setIsReportModalOpen(false);
+      setReportWord(null);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to send your report right now.";
+      toast({
+        title: "Report failed",
+        description: message,
+        status: "error",
+        duration: 5000,
+        isClosable: true
+      });
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   return (
     <Flex
       direction="column"
@@ -695,6 +786,8 @@ export default function PracticeSession({
         onPreviousSegment={handlePreviousSegment}
         onNextSegment={handleNextSegment}
         onSelectSegment={handleSelectSegment}
+        onRandomSegment={handleRandomSegment}
+        canRandomizeSegment={Boolean(exercise) && audio.clipCount > 1}
         onSegmentsPerClipChange={handleSegmentsPerClipChange}
         onLoadedMetadata={audio.onLoadedMetadata}
         onCanPlay={audio.onCanPlay}
@@ -731,6 +824,15 @@ export default function PracticeSession({
         />
       ) : null}
 
+      <IncorrectTranslationReportModal
+        isOpen={isReportModalOpen}
+        word={reportWord}
+        isSubmitting={isSubmittingReport}
+        onClose={handleCloseReportModal}
+        onCloseComplete={focusTranscriptionForEditing}
+        onSubmit={() => void handleSubmitIncorrectTranslationReport()}
+      />
+
       <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
         <TranscriptionEditor
           ref={textareaRef}
@@ -741,6 +843,8 @@ export default function PracticeSession({
           isGraded={isGraded}
           submittedText={gradedSubmission}
           correctedWords={gradeResult?.correctedWords}
+          canReportWords={canReportWords}
+          onWordClick={handleWordClick}
         />
       </Box>
     </Flex>

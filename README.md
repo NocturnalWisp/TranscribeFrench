@@ -99,13 +99,25 @@ npm run seed -- --force
 
 
 
-Deploy rules, storage, database content, and hosting:
+Deploy rules, storage, database content, hosting, and Cloud Functions:
 
 
 
 ```bash
 
 npm run deploy
+
+```
+
+
+
+Deploy only Cloud Functions:
+
+
+
+```bash
+
+npm run deploy:functions
 
 ```
 
@@ -154,6 +166,10 @@ npm run deploy:storage
 
 
 `users/{uid}` — profile created on first Google sign-in (readable/writable only by that user).
+
+
+
+`supportTickets/{ticketId}` — incorrect-translation reports created by Cloud Functions (not writable from the client).
 
 
 
@@ -222,5 +238,59 @@ In dev, audio is served from `content/audio-exercises/` at `/local-audio-exercis
 - Grading logic lives in `src/utils/grading.ts`.
 
 - Local transcription workflow: `local-tools/whisper-transcribe/README.md`
+
+
+
+## 7) Cloud Functions (incorrect translation reports)
+
+
+
+After grading, signed-in users can tap a word in the correct answer and report an incorrect translation. The app calls the `reportIncorrectTranslation` callable function, which writes a ticket to RTDB and emails your support address.
+
+
+
+### One-time setup
+
+
+
+1. Enable the **Blaze** plan (Cloud Functions require billing).
+
+2. Set the Zoho SMTP secret (same setup as Lingolo):
+
+
+
+```bash
+
+firebase functions:secrets:set ZOHO_SMTP_PASSWORD
+
+```
+
+
+
+Use the Zoho **application-specific password** for `hello@playlingolo.com`. Mail is sent via `smtppro.zohocloud.ca` on port 465 (SSL).
+
+
+
+**After changing the secret, redeploy:**
+
+
+
+```bash
+
+npm run deploy:functions
+
+```
+
+
+
+3. Deploy functions:
+
+
+
+```bash
+
+npm run deploy:functions
+
+```
 
 

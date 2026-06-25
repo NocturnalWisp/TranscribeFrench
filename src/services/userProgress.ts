@@ -357,36 +357,21 @@ export const saveGradeProgress = async (
     throw new Error("Unable to save progress for this exercise.");
   }
 
-  const missedSentences: Record<string, MissedSentence | null> = {};
+  const payload: Record<string, unknown> = {
+    [`progress/${exerciseId}/segments/${input.segmentKey}`]: input.segmentProgress,
+    [`dailyStats/${input.dailyStats.date}`]: input.dailyStats
+  };
+
   for (const { key, value } of input.missedSentenceUpdates) {
-    missedSentences[key] = value;
+    payload[`progress/${exerciseId}/missedSentences/${key}`] = value;
   }
 
-  const missedWords: Record<string, MissedWordEntry> = {};
   for (const { normalized, entry } of input.missedWordUpdates) {
     if (!normalized) {
       continue;
     }
 
-    missedWords[normalized] = entry;
-  }
-
-  const payload: Record<string, unknown> = {
-    progress: {
-      [exerciseId]: {
-        segments: {
-          [input.segmentKey]: input.segmentProgress
-        },
-        ...(Object.keys(missedSentences).length > 0 ? { missedSentences } : {})
-      }
-    },
-    dailyStats: {
-      [input.dailyStats.date]: input.dailyStats
-    }
-  };
-
-  if (Object.keys(missedWords).length > 0) {
-    payload.missedWords = missedWords;
+    payload[`missedWords/${normalized}`] = entry;
   }
 
   try {

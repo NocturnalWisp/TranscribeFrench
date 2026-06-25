@@ -8,11 +8,21 @@ type TranscriptionEditorProps = {
   isGraded?: boolean;
   submittedText?: string;
   correctedWords?: GradedWord[] | null;
+  canReportWords?: boolean;
+  onWordClick?: (word: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
 };
 
-function WordHighlight({ words }: { words: GradedWord[] }) {
+function WordHighlight({
+  words,
+  canReportWords,
+  onWordClick
+}: {
+  words: GradedWord[];
+  canReportWords: boolean;
+  onWordClick?: (word: string) => void;
+}) {
   return (
     <Text fontSize="md" lineHeight="tall">
       {words.map((word, index) => (
@@ -28,6 +38,27 @@ function WordHighlight({ words }: { words: GradedWord[] }) {
           bg={word.isCorrect ? "transparent" : "blackAlpha.100"}
           px={word.isCorrect ? 0 : 0.5}
           borderRadius={word.isCorrect ? undefined : "sm"}
+          cursor={canReportWords ? "pointer" : undefined}
+          role={canReportWords ? "button" : undefined}
+          tabIndex={canReportWords ? 0 : undefined}
+          onClick={
+            canReportWords
+              ? () => {
+                  onWordClick?.(word.text);
+                }
+              : undefined
+          }
+          onKeyDown={
+            canReportWords
+              ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onWordClick?.(word.text);
+                  }
+                }
+              : undefined
+          }
+          _hover={canReportWords ? { bg: "teal.50" } : undefined}
         >
           {word.text}
           {index < words.length - 1 ? " " : ""}
@@ -39,7 +70,17 @@ function WordHighlight({ words }: { words: GradedWord[] }) {
 
 export const TranscriptionEditor = forwardRef<HTMLTextAreaElement, TranscriptionEditorProps>(
   function TranscriptionEditor(
-    { value, onChange, isGraded = false, submittedText = "", correctedWords, onFocus, onBlur },
+    {
+      value,
+      onChange,
+      isGraded = false,
+      submittedText = "",
+      correctedWords,
+      canReportWords = false,
+      onWordClick,
+      onFocus,
+      onBlur
+    },
     ref
   ) {
     return (
@@ -71,7 +112,11 @@ export const TranscriptionEditor = forwardRef<HTMLTextAreaElement, Transcription
                 <Text fontSize="xs" fontWeight="semibold" color="gray.500" mb={1}>
                   Correct answer
                 </Text>
-                <WordHighlight words={correctedWords} />
+                <WordHighlight
+                  words={correctedWords}
+                  canReportWords={canReportWords}
+                  onWordClick={onWordClick}
+                />
               </Box>
             ) : null}
           </VStack>

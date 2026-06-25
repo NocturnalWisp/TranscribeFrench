@@ -18,6 +18,10 @@
       ".read": "auth != null && auth.token.firebase.sign_in_provider == 'google.com'",
       ".write": false
     },
+    "supportTickets": {
+      ".read": false,
+      ".write": false
+    },
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
